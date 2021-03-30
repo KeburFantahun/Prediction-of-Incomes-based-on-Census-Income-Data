@@ -1,0 +1,218 @@
+---
+title: "Project 2"
+author: "Kebur Fantahun, Ben Goodwin, Andre Mauldin"
+date: "3/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This markdown document contains the collective work of group one for MSDS6372, Spring 2021
+
+## Global Notes:
+
+# We have elected to use dataset 2,	https://archive.ics.uci.edu/ml/datasets/Adult, Predicting if someone makes over 50k
+# All inference will be based on these data
+
+######################################################################################################################################################
+
+```{r}
+#Libraries
+#Try to add libraries up here to avoid clutter and to better manage libraries
+library(tidyverse)
+library(MASS)
+library(naniar)
+library(caret)
+
+```
+
+```{r}
+#Time to bring in the data and rename columns
+
+incomeDataMaster <- read.csv("adult.csv")
+#Check import
+#View(incomeDataUSE)
+
+incomeDataTestMaster <- read.csv("adultTest.csv")
+#Check import
+#View(incomeDataTestMaster)
+
+#Create some copies of the data
+incomeDataUSE <- incomeDataMaster
+#Check import
+#View(incomeDataTestMaster)
+
+#Rename Columns, use dplyr, using "incomeDataUSE" file
+#Will rename based on "adult.names" file for consistency
+
+#Col 1, X39, changed to Age
+#Description: Age of subject, continuous
+incomeDataUSE <-  incomeDataUSE %>% rename(Age = X39)
+
+#Col 2, State.gov, changed to workclass
+#Description: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked. Factor
+incomeDataUSE <-  incomeDataUSE %>% rename(workclass = State.gov)
+
+#Col 3, X77516, changed to fnlwgt
+#Description: final weight. In other words, this is the number of people the census believes. the entry represents
+incomeDataUSE <-  incomeDataUSE %>% rename(fnlwgt = X77516)
+
+#Col 4, Bachelors, changed to education
+#Description: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
+incomeDataUSE <-  incomeDataUSE %>% rename(Education = Bachelors)
+
+#Col 5, X13, changed to education-num
+#Description: stands for the number of years of education in total, which is a continuous representation of the discrete variable education
+incomeDataUSE <-  incomeDataUSE %>% rename("education-num" = X13)
+
+#Col 6, Never.married, changed to marital-status
+#Description: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse.
+incomeDataUSE <-  incomeDataUSE %>% rename("marital-status" = Never.married)
+
+#Col 7,Adm.clerical, changed to occupation
+#Description: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
+incomeDataUSE <-  incomeDataUSE %>% rename(occupation = Adm.clerical)
+
+#Col 8, Not.in.family, changed to relationship
+#Description:  Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+incomeDataUSE <-  incomeDataUSE %>% rename(relationship = Not.in.family)
+
+#Col 9, White, changed to race
+#Description: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black
+incomeDataUSE <-  incomeDataUSE %>% rename(race = White)
+
+#Col 10, Male, changed to sex
+#Description: Female, Male
+incomeDataUSE <-  incomeDataUSE %>% rename(sex = Male)
+
+#Col 11, X2174, changed to capital-gain
+#Description: Describing income from financial investments
+incomeDataUSE <-  incomeDataUSE %>% rename("capital-gain" = X2174) 
+
+#Col 12, X0, changed to capital-loss
+#Description: Describing loss from financial investments
+incomeDataUSE <-  incomeDataUSE %>%  rename("capital-loss" = X0) 
+
+#Col 13, X40, changed to hours-per-week
+#Description: Number of hours worked per week
+incomeDataUSE <-  incomeDataUSE %>%  rename("hours-per-week" = X40) 
+
+#Col 14,United.States, changed to native-country
+#Description: Native country of subject
+incomeDataUSE <-  incomeDataUSE %>%  rename("native-country" = "United.States") 
+
+#Col 15, X..50K, changed to income
+#Description: Income
+incomeDataUSE <-  incomeDataUSE %>% rename(income = X..50K) 
+
+```
+
+```{r}
+#Lets fix up the data 
+
+#Change outcome to factor
+incomeDataUSE$income <- as.factor(incomeDataUSE$income)
+
+#Lets dump some variables
+incomeDataUSE <- dplyr::select(incomeDataUSE, -Education, -fnlwgt, -relationship)
+#Reason for dropping education
+#Education level is present in the data and is numeric, thus equivalent and easier to handle
+
+#Reason for dropping fnlwgt
+#Just don"t know how to use this weighting variable
+
+#Reason for dropping relationship
+#This is encapsulated in gender and family role, essentially a duplicate variable
+
+#A few more variables to drop
+incomeDataUSE <- dplyr::select(incomeDataUSE,-"capital-gain", -"capital-loss", -"native-country")
+
+#Reason for dropping capital gain
+#Around 90% of observations don't feature this
+
+#Reason for dropping capital loss
+#Around 90% of observations don't feature this
+
+#Reason for dropping native country 
+#Most observations are from the US and skew the data
+
+#We can also make a few of the variables nicer to work with
+#Fist up, fix workclass
+#Objective here is to combine some of the working classes
+#Govt jobs can be combined
+
+#Change "?" to unknown, but first make it factor
+incomeDataUSE$workclass <- as.factor(incomeDataUSE$workclass)
+levels(incomeDataUSE$workclass)[1] <- 'Unknown'
+# combine into Government job
+incomeDataUSE$workclass <- gsub('Federal-gov', 'Government', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('Local-gov', 'Government', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('State-gov', 'Government', incomeDataUSE$workclass) 
+
+# combine into Sele-Employed job
+incomeDataUSE$workclass <- gsub('Self-emp-inc', 'Self-Employed', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('Self-emp-not-inc', 'Self-Employed', incomeDataUSE$workclass)
+
+# combine into Other/Unknown
+incomeDataUSE$workclass <- gsub('Other', 'Other/Unknown', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('Unknown', 'Other/Unknown', incomeDataUSE$workclass)
+
+incomeDataUSE <- incomeDataUSE[-c(1901,5361,9257,10845,14772,15533,15695,16812,20073,20337,21944,22215,23232,24596,25500,27747,28829,29158,32262,32304,32314),]
+
+incomeDataUSE$workclass <- as.factor(incomeDataUSE$workclass)
+
+summary(incomeDataUSE$workclass)
+
+
+```
+
+```{r}
+#Time for some EDA
+
+#First up, check the completeness of the data
+vis_miss(incomeDataUSE)
+#How convenient, data is complete, and no data is missing
+
+# Make a histogram of age and income
+ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=income, fill=income) + 
+  geom_histogram(binwidth=1, color='black')
+#Looks like <=50k dominates
+#Otherwise pretty typical look for income distribution
+
+# Make a histogram of age and sex
+ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=sex, fill=sex) + 
+  geom_histogram(binwidth=1, color='black')
+
+# Make a histogram of age and workclass
+ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=workclass, fill=workclass) + 
+  geom_histogram(binwidth=1, color='black')
+
+
+
+```
+
+
+```{r}
+#Do the logistic regression
+
+#Lets first split up the data, 80,20 should do it
+trainIndex <- createDataPartition(incomeDataUSE$income, p = .8, list = FALSE, times = 1)
+dtrain<-incomeDataUSE[trainIndex,]
+dtest<-incomeDataUSE[-trainIndex,]
+
+# 10-fold CV
+fitControl <- trainControl(method = "cv",number = 10,savePredictions = TRUE)
+lreg<-train(income~.,data=dtrain,method="glm",family=binomial(),trControl=fitControl)
+summary(lreg)
+varImp(lreg)
+
+
+lreg_pred<-predict(lreg,dtest)
+confusionMatrix(lreg_pred,dtest$income)
+
+
+
+```
+
