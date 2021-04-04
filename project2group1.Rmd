@@ -16,6 +16,8 @@ knitr::opts_chunk$set(echo = TRUE)
 # We have elected to use dataset 2,	https://archive.ics.uci.edu/ml/datasets/Adult, Predicting if someone makes over 50k
 # All inference will be based on these data
 
+##All EDA and analysis performed on test data
+
 ######################################################################################################################################################
 
 ```{r}
@@ -25,6 +27,9 @@ library(tidyverse)
 library(MASS)
 library(naniar)
 library(caret)
+library(plyr)
+library(broom)
+library(imbalance)
 
 ```
 
@@ -49,63 +54,78 @@ incomeDataUSE <- incomeDataMaster
 
 #Col 1, X39, changed to Age
 #Description: Age of subject, continuous
-incomeDataUSE <-  incomeDataUSE %>% rename(Age = X39)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(Age = X39)
+incomeDataTestMaster <- incomeDataTestMaster %>%dplyr::rename(Age = X25)
 
 #Col 2, State.gov, changed to workclass
 #Description: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked. Factor
-incomeDataUSE <-  incomeDataUSE %>% rename(workclass = State.gov)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(workclass = State.gov)
+incomeDataTestMaster <- incomeDataTestMaster %>% dplyr::rename(workclass = Private)
 
 #Col 3, X77516, changed to fnlwgt
 #Description: final weight. In other words, this is the number of people the census believes. the entry represents
-incomeDataUSE <-  incomeDataUSE %>% rename(fnlwgt = X77516)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(fnlwgt = X77516)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(fnlwgt = X226802)
 
 #Col 4, Bachelors, changed to education
 #Description: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
-incomeDataUSE <-  incomeDataUSE %>% rename(Education = Bachelors)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(Education = Bachelors)
+incomeDataTestMaster <- incomeDataTestMaster %>% dplyr::rename(Education = X11th)
 
 #Col 5, X13, changed to education-num
 #Description: stands for the number of years of education in total, which is a continuous representation of the discrete variable education
-incomeDataUSE <-  incomeDataUSE %>% rename("education-num" = X13)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename("education-num" = X13)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename("education-num" = X7)
 
 #Col 6, Never.married, changed to marital-status
 #Description: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse.
-incomeDataUSE <-  incomeDataUSE %>% rename("marital-status" = Never.married)
+incomeDataUSE <-  incomeDataUSE %>%dplyr::rename("marital-status" = Never.married)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename("marital-status" = Never.married)
 
 #Col 7,Adm.clerical, changed to occupation
 #Description: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
-incomeDataUSE <-  incomeDataUSE %>% rename(occupation = Adm.clerical)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(occupation = Adm.clerical)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(occupation = Machine.op.inspct)
 
 #Col 8, Not.in.family, changed to relationship
 #Description:  Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
-incomeDataUSE <-  incomeDataUSE %>% rename(relationship = Not.in.family)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(relationship = Not.in.family)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(relationship = Own.child)
 
 #Col 9, White, changed to race
 #Description: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black
-incomeDataUSE <-  incomeDataUSE %>% rename(race = White)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(race = White)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(race = Black)
 
 #Col 10, Male, changed to sex
 #Description: Female, Male
-incomeDataUSE <-  incomeDataUSE %>% rename(sex = Male)
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(sex = Male)
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(sex = Male)
 
 #Col 11, X2174, changed to capital-gain
 #Description: Describing income from financial investments
-incomeDataUSE <-  incomeDataUSE %>% rename("capital-gain" = X2174) 
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename("capital-gain" = X2174) 
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename("capital-gain" = X0)
 
 #Col 12, X0, changed to capital-loss
 #Description: Describing loss from financial investments
-incomeDataUSE <-  incomeDataUSE %>%  rename("capital-loss" = X0) 
+incomeDataUSE <-  incomeDataUSE %>%  dplyr::rename("capital-loss" = X0) 
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename("capital-loss" = X0.1) 
 
 #Col 13, X40, changed to hours-per-week
 #Description: Number of hours worked per week
-incomeDataUSE <-  incomeDataUSE %>%  rename("hours-per-week" = X40) 
+incomeDataUSE <-  incomeDataUSE %>%  dplyr::rename("hours-per-week" = X40) 
+incomeDataTestMaster <- incomeDataTestMaster%>%  dplyr::rename("hours-per-week" = X40) 
 
 #Col 14,United.States, changed to native-country
 #Description: Native country of subject
-incomeDataUSE <-  incomeDataUSE %>%  rename("native-country" = "United.States") 
+incomeDataUSE <-  incomeDataUSE %>%  dplyr::rename("native-country" = "United.States") 
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename("native-country" = "United.States")
 
 #Col 15, X..50K, changed to income
 #Description: Income
-incomeDataUSE <-  incomeDataUSE %>% rename(income = X..50K) 
+incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(income = X..50K) 
+incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(income = X..50K.) 
 
 ```
 
@@ -114,9 +134,10 @@ incomeDataUSE <-  incomeDataUSE %>% rename(income = X..50K)
 
 #Change outcome to factor
 incomeDataUSE$income <- as.factor(incomeDataUSE$income)
-
+incomeDataTestMaster$income <- as.factor(incomeDataTestMaster$income)
 #Lets dump some variables
 incomeDataUSE <- dplyr::select(incomeDataUSE, -Education, -fnlwgt, -relationship)
+incomeDataTestMaster <- dplyr::select(incomeDataTestMaster, -Education, -fnlwgt, -relationship)
 #Reason for dropping education
 #Education level is present in the data and is numeric, thus equivalent and easier to handle
 
@@ -128,7 +149,7 @@ incomeDataUSE <- dplyr::select(incomeDataUSE, -Education, -fnlwgt, -relationship
 
 #A few more variables to drop
 incomeDataUSE <- dplyr::select(incomeDataUSE,-"capital-gain", -"capital-loss", -"native-country")
-
+incomeDataTestMaster <- dplyr::select(incomeDataTestMaster,-"capital-gain", -"capital-loss", -"native-country")
 #Reason for dropping capital gain
 #Around 90% of observations don't feature this
 
@@ -145,26 +166,37 @@ incomeDataUSE <- dplyr::select(incomeDataUSE,-"capital-gain", -"capital-loss", -
 
 #Change "?" to unknown, but first make it factor
 incomeDataUSE$workclass <- as.factor(incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- as.factor(incomeDataTestMaster$workclass)
 levels(incomeDataUSE$workclass)[1] <- 'Unknown'
+levels(incomeDataTestMaster$workclass)[1] <- 'Unknown'
 # combine into Government job
 incomeDataUSE$workclass <- gsub('Federal-gov', 'Government', incomeDataUSE$workclass)
 incomeDataUSE$workclass <- gsub('Local-gov', 'Government', incomeDataUSE$workclass)
 incomeDataUSE$workclass <- gsub('State-gov', 'Government', incomeDataUSE$workclass) 
+incomeDataTestMaster$workclass <- gsub('Federal-gov', 'Government', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('Local-gov', 'Government', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('State-gov', 'Government', incomeDataTestMaster$workclass) 
 
-# combine into Sele-Employed job
+
+# combine into Self-Employed job
 incomeDataUSE$workclass <- gsub('Self-emp-inc', 'Self-Employed', incomeDataUSE$workclass)
 incomeDataUSE$workclass <- gsub('Self-emp-not-inc', 'Self-Employed', incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- gsub('Self-emp-inc', 'Self-Employed', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('Self-emp-not-inc', 'Self-Employed', incomeDataTestMaster$workclass)
 
 # combine into Other/Unknown
 incomeDataUSE$workclass <- gsub('Other', 'Other/Unknown', incomeDataUSE$workclass)
 incomeDataUSE$workclass <- gsub('Unknown', 'Other/Unknown', incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- gsub('Other', 'Other/Unknown', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('Unknown', 'Other/Unknown', incomeDataTestMaster$workclass)
+
 
 incomeDataUSE <- incomeDataUSE[-c(1901,5361,9257,10845,14772,15533,15695,16812,20073,20337,21944,22215,23232,24596,25500,27747,28829,29158,32262,32304,32314),]
-
+incomeDataTestMaster <- incomeDataTestMaster[-c(2957,3177,6466,8785,8903,10647,11607,13836,13898,14034),]
 incomeDataUSE$workclass <- as.factor(incomeDataUSE$workclass)
-
+incomeDataTestMaster$workclass <- as.factor(incomeDataTestMaster$workclass)
 summary(incomeDataUSE$workclass)
-
+summary(incomeDataTestMaster$workclass)
 
 ```
 
@@ -186,33 +218,191 @@ ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=sex, fill=sex) +
   geom_histogram(binwidth=1, color='black')
 
 # Make a histogram of age and workclass
+
 ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=workclass, fill=workclass) + 
   geom_histogram(binwidth=1, color='black')
 
+#Make bar plot of Education vs income by group
+####################################################################################
+eduVsIncomeDf <- data.frame(table(incomeDataUSE$`education-num`, incomeDataUSE$income))
+names(eduVsIncomeDf) <- c('Education', 'income', 'count')
+#test
+eduVsIncomeDf
+
+# calculate the percentages
+eduVsIncomeDf <- ddply(eduVsIncomeDf, .(Education), transform, percent = count/sum(count) * 100)
+eduVsIncomeDf
+# format the labels and calculate their positions
+eduVsIncomeDf <- ddply(eduVsIncomeDf, .(Education), transform, pos = (cumsum(count) - 0.5 * count))
+eduVsIncomeDf$label <- paste0(sprintf("%.0f", eduVsIncomeDf$percent), "%")
+
+# bar plot of counts by marital status with in group proportions 
+ggplot(eduVsIncomeDf, aes(x = Education, y = count, fill = income)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(y = pos, label = label), size = 2) + 
+  ggtitle('Education Level with Income')
+####################################################################################
+
+#Plot of work-class distribution
+p<-ggplot(data=incomeDataUSE, aes(x=workclass, y="count", fill=workclass)) +
+  geom_bar(stat="identity")+ggtitle("Work-Class Distribution")+ylab("Count")+xlab("Categories")
+p
+
+#Plot of work-class distribution
+p<-ggplot(data=incomeDataUSE, aes(x=occupation, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Occupation Distribution")+ylab("Count")+xlab("Categories")
+
+p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#Plot race vs income
+p<-ggplot(data=incomeDataUSE, aes(x=race, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Race Vs. Income")+ylab("Count")+xlab("Categories")
+p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 
+#Plot Sex vs income
+p<-ggplot(data=incomeDataUSE, aes(x=sex, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Occupation Distribution")+ylab("Count")+xlab("Categories")
+p
 ```
 
 
 ```{r}
-#Do the logistic regression
 
+#Do the logistic regression
+lreg <- glm(income~.,data=incomeDataUSE,family = binomial('logit'))
+
+#Generate Summary Stats
+summary(lreg)
+
+#Generate Paramter CI's
+confint(lreg)
+
+#Copy Model into var
+completeModel <- lreg
+completeModel <- glm(income ~ 1, data = incomeDataUSE, family = binomial('logit'))
+
+# backward selection
+step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'backward')
+
+# forward selection
+step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'forward')
+
+#Plot Residuals
+index <- 1:dim(incomeDataUSE)[1]
+dev_resid <- residuals(lreg)
+income <- incomeDataUSE$income
+dff <- data.frame(index, dev_resid, income)
+
+p <- ggplot(dff, aes(x = index, y = dev_resid, color = income)) +
+  geom_point()+theme_minimal()+ggtitle("Residual Plot for Income Groups")+xlab("Subject #")+ylab("Residuals")
+p
+
+#Plot Cooks distance
+plot(lreg,which=4,id.n=3)
+
+#Plot Leverage
+plot(lreg,which = 5)
+
+##################
+
+#Do the predictions form test dataset
+prob <- predict(lreg, incomeDataTestMaster, type = 'response')
+pred <- rep('<=50K', length(prob))
+pred[prob>=.5] <- '>50K'
+
+# Generate Confusion Matrix
+tb <- table(pred, incomeDataTestMaster$income)
+tb
+
+#Here we are doing some basic measures from the confusion matrix
+tbSum <- tb[1,1]+tb[1,2]+tb[2,1]+tb[2,2]
+tp <- tb[1,1]+tb[2,2]
+TPR <- tp/tbSum
+
+#Accuracy
+TPR
+
+#Error Rate
+ER <- (tb[2,1]+tb[1,2])/tbSum
+ER
+
+#Sensitivity
+SensitivityMetric <- (tb[1,1])/(tb[1,1]+tb[2,1])
+SensitivityMetric
+
+#Specificity
+SpecificityMetric <- (tb[2,2])/(tb[1,2]+tb[2,2])
+SpecificityMetric
+
+#Precision
+PrecisionMetric <- (tb[1,2])/(tb[1,1]+tb[2,1])
+PrecisionMetric
+
+#False Positive Rate
+FPR <- 1-SpecificityMetric
+FPR
+
+#Old
+##########################################################################################
 #Lets first split up the data, 80,20 should do it
-trainIndex <- createDataPartition(incomeDataUSE$income, p = .8, list = FALSE, times = 1)
-dtrain<-incomeDataUSE[trainIndex,]
-dtest<-incomeDataUSE[-trainIndex,]
+#trainIndex <- createDataPartition(incomeDataUSE$income, p = .8, list = FALSE, times = 1)
+#dtrain<-incomeDataUSE[trainIndex,]
+#dtest<-incomeDataUSE[-trainIndex,]
 
 # 10-fold CV
-fitControl <- trainControl(method = "cv",number = 10,savePredictions = TRUE)
-lreg<-train(income~.,data=dtrain,method="glm",family=binomial(),trControl=fitControl)
-summary(lreg)
-varImp(lreg)
+#fitControl <- trainControl(method = "cv",number = 10,savePredictions = TRUE)
+#lreg<-train(income~.,data=incomeDataUSE,method="glm",family=binomial(),trControl=fitControl)
+#summary(lreg)
+#varImp(lreg)
 
 
-lreg_pred<-predict(lreg,dtest)
-confusionMatrix(lreg_pred,dtest$income)
+#lreg_pred<-predict(lreg,incomeDataTestMaster)
+#confusionMatrix(lreg_pred,incomeDataTestMaster$income)
 
 
 
 ```
+
+
+
+##Objective 2
+
+
+#First up, we will use a different sampling technique on the data due to the imbalance between >50k and <50K
+```{r}
+#Check the balance of the data
+#Plot Sex vs income
+p<-ggplot(data=incomeDataUSE, aes(x=income, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Occupation Distribution")+ylab("Count")+xlab("Categories")
+p
+#Clearly most of the data <=50k
+#Lets make a table to see the split
+IncomeDf <- data.frame(table(incomeDataUSE$income))
+names(eduVsIncomeDf) <- c('income', 'count')
+#test
+IncomeDf
+
+incomeSum <- sum(IncomeDf$Freq)
+f1 <- 0.75902763
+f2 <- 1-f1
+
+#Data is ~75/25 split, heavily imbalanced toward those who <=50k/year
+
+#over sample to correct for imbalance
+table(income)
+incomeDataUSE$income <- as.factor(incomeDataUSE$income)
+
+
+
+
+
+```
+
+
+
+
+
+
+
 
