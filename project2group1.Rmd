@@ -30,7 +30,9 @@ library(caret)
 library(plyr)
 library(broom)
 library(imbalance)
-
+library(randomForest)
+library(kernlab)
+library(ROCR)
 ```
 
 ```{r}
@@ -369,39 +371,197 @@ FPR
 ##Objective 2
 
 
-#First up, we will use a different sampling technique on the data due to the imbalance between >50k and <50K
+#Create a more complicated logistic regression model
 ```{r}
-#Check the balance of the data
-#Plot Sex vs income
-p<-ggplot(data=incomeDataUSE, aes(x=income, y="count", fill=income)) +
-  geom_bar(stat="identity")+ggtitle("Occupation Distribution")+ylab("Count")+xlab("Categories")
+#Make the log data
+incomeDatTrainlog <- incomeDataUSE
+incomeDatTrainlog$Age <- log(incomeDataUSE$Age)
+incomeTestlog <- incomeDataTestMaster
+incomeTestlog$Age <- log(incomeTestlog$Age)
+#Do the logistic regression
+lreg <- glm(income~.,data=incomeDatTrainlog,family = binomial('logit'))
+
+#Generate Summary Stats
+summary(lreg)
+
+#Generate Paramter CI's
+confint(lreg)
+
+#Copy Model into var
+completeModel <- lreg
+completeModel <- glm(income ~ 1, data = incomeDatTrainlog, family = binomial('logit'))
+
+# backward selection
+step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'backward')
+
+# forward selection
+step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'forward')
+
+#Plot Residuals
+index <- 1:dim(incomeDatTrainlog)[1]
+dev_resid <- residuals(lreg)
+income <- incomeDatTrainlog$income
+dff <- data.frame(index, dev_resid, income)
+
+p <- ggplot(dff, aes(x = index, y = dev_resid, color = income)) +
+  geom_point()+theme_minimal()+ggtitle("Residual Plot for Income Groups")+xlab("Subject #")+ylab("Residuals")
 p
-#Clearly most of the data <=50k
-#Lets make a table to see the split
-IncomeDf <- data.frame(table(incomeDataUSE$income))
-names(eduVsIncomeDf) <- c('income', 'count')
-#test
-IncomeDf
 
-incomeSum <- sum(IncomeDf$Freq)
-f1 <- 0.75902763
-f2 <- 1-f1
+#Plot Cooks distance
+plot(lreg,which=4,id.n=3)
 
-#Data is ~75/25 split, heavily imbalanced toward those who <=50k/year
+#Plot Leverage
+plot(lreg,which = 5)
 
-#over sample to correct for imbalance
-table(income)
-incomeDataUSE$income <- as.factor(incomeDataUSE$income)
+#Do the predictions form test dataset
+probLog <- predict(lreg, incomeTestlog, type = 'response')
+pred <- rep('<=50K', length(probLog))
+pred[prob>=.5] <- '>50K'
 
+# Generate Confusion Matrix
+tb <- table(pred, incomeTestlog$income)
+tb
+
+#Here we are doing some basic measures from the confusion matrix
+tbSum <- tb[1,1]+tb[1,2]+tb[2,1]+tb[2,2]
+tp <- tb[1,1]+tb[2,2]
+TPR <- tp/tbSum
+
+#Accuracy
+TPR
+
+#Error Rate
+ER <- (tb[2,1]+tb[1,2])/tbSum
+ER
+
+#Sensitivity
+SensitivityMetric <- (tb[1,1])/(tb[1,1]+tb[2,1])
+SensitivityMetric
+
+#Specificity
+SpecificityMetric <- (tb[2,2])/(tb[1,2]+tb[2,2])
+SpecificityMetric
+
+#Precision
+PrecisionMetric <- (tb[1,2])/(tb[1,1]+tb[2,1])
+PrecisionMetric
+
+#False Positive Rate
+FPR <- 1-SpecificityMetric
+FPR
 
 
 
 
 ```
 
+#Create another competing model using continuous predictors with LDA or QDA
+```{r}
+#Build up LDA
+lda_income <- lda(income ~Age+`education-num` +`hours-per-week`,data=incomeDataUSE)
+
+#Plot model
+plot(lda_income)
+
+#Prediction
+predictLDA <- predict(lda_income,newdata=incomeDataTestMaster)
+
+#CM
+ldaCM <- table(incomeDataTestMaster$income,predictLDA$class)
+ldaCM
+
+#Classification Rate
+ldaFinal <- ldaCM %>% prop.table() %>% round(3)
+ldaFinal
+```
 
 
 
+#This block contains an attempt at a support vector machine, nonparametric model to compare to
+```{r}
+svmIncomeModel <- ksvm(income ~ ., data = incomeDataUSE)
+svmIncomeModelPredictions <- predict(svmIncomeModel, newdata = incomeDataTestMaster, type = 'decision')
+svmIncomeModelFinal <- predict(svmIncomeModel, newdata = incomeDataTestMaster, type = 'response')
+
+
+#Now create confusion matrix for SVM
+svmCM <- table(svmIncomeModelFinal, incomeDataTestMaster$income)
+svmCM
+
+#Here we are doing some basic measures from the confusion matrix
+tbSum <- svmCM[1,1]+svmCM[1,2]+svmCM[2,1]+svmCM[2,2]
+tp <- svmCM[1,1]+svmCM[2,2]
+TPR <- tp/tbSum
+
+
+#Accuracy
+TPR
+
+#Error Rate
+ER <- (svmCM[2,1]+svmCM[1,2])/tbSum
+ER
+
+#Sensitivity
+SensitivityMetric <- (svmCM[1,1])/(svmCM[1,1]+svmCM[2,1])
+SensitivityMetric
+
+#Specificity
+SpecificityMetric <- (svmCM[2,2])/(svmCM[1,2]+svmCM[2,2])
+SpecificityMetric
+
+#Precision
+PrecisionMetric <- (svmCM[1,2])/(svmCM[1,1]+svmCM[2,1])
+PrecisionMetric
+
+#False Positive Rate
+FPR <- 1-SpecificityMetric
+FPR
+
+
+
+```
+
+
+#Create an ROC curve for each model, plot it, and then add to AUC table
+```{r}
+# create a prediction object
+pr <- prediction(prob, incomeDataTestMaster$income)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+
+pr1 <- prediction(probLog, incomeTestlog$income)
+prf1 <- performance(pr1, measure = "tpr", x.measure = "fpr")
+
+# create a data frame for TP and FP rates
+dd <- data.frame(FP = prf@x.values[[1]], TP = prf@y.values[[1]])
+dd2 <- data.frame(FP = prf1@x.values[[1]], TP = prf1@y.values[[1]])
+
+# SVM
+pr4 <- prediction(svmIncomeModelPredictions, incomeDataTestMaster$income)
+prf4 <- performance(pr4, measure = "tpr", x.measure = "fpr")
+dd4 <- data.frame(FP = prf4@x.values[[1]], TP = prf4@y.values[[1]])
+
+# plot ROC curve for logistic regression
+g <- ggplot() + 
+  geom_line(data = dd, aes(x = FP, y = TP, color = 'Logistic Regression')) + 
+   
+  geom_line(data = dd2, aes(x = FP, y = TP, color = 'Logged Logistic Regression')) + 
+
+  geom_line(data = dd4, aes(x = FP, y = TP, color = 'Support Vector Machine')) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1)) +
+  ggtitle('ROC Curve') + 
+  labs(x = 'False Positive Rate', y = 'True Positive Rate') 
+
+
+g +  scale_colour_manual(name = 'Classifier', values = c('Logistic Regression'='Plum', 
+                                               'Logged Logistic Regression'='Salmon','Support Vector Machine'='#0072B2'))
+
+# AUC
+auc <- rbind(performance(pr, measure = 'auc')@y.values[[1]],
+             performance(pr4, measure = 'auc')@y.values[[1]])
+rownames(auc) <- (c('Logistic Regression', 'Support Vector Machine'))
+colnames(auc) <- 'Area Under ROC Curve'
+round(auc, 4)
+```
 
 
 
