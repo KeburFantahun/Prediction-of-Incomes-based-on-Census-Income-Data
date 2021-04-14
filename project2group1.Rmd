@@ -33,6 +33,7 @@ library(imbalance)
 library(randomForest)
 library(kernlab)
 library(ROCR)
+library(car)
 ```
 
 ```{r}
@@ -50,6 +51,12 @@ incomeDataTestMaster <- read.csv("adultTest.csv")
 incomeDataUSE <- incomeDataMaster
 #Check import
 #View(incomeDataTestMaster)
+
+#Look at summary stats for test data
+summary(incomeDataUSE)
+
+#Same thing for test data
+summary(incomeDataTestMaster)
 
 #Rename Columns, use dplyr, using "incomeDataUSE" file
 #Will rename based on "adult.names" file for consistency
@@ -88,6 +95,7 @@ incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename("marital-status" =
 #Description: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
 incomeDataUSE <-  incomeDataUSE %>% dplyr::rename(occupation = Adm.clerical)
 incomeDataTestMaster <- incomeDataTestMaster%>% dplyr::rename(occupation = Machine.op.inspct)
+
 
 #Col 8, Not.in.family, changed to relationship
 #Description:  Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
@@ -200,6 +208,8 @@ incomeDataTestMaster$workclass <- as.factor(incomeDataTestMaster$workclass)
 summary(incomeDataUSE$workclass)
 summary(incomeDataTestMaster$workclass)
 
+summary(incomeDataUSE)
+
 ```
 
 ```{r}
@@ -208,6 +218,9 @@ summary(incomeDataTestMaster$workclass)
 #First up, check the completeness of the data
 vis_miss(incomeDataUSE)
 #How convenient, data is complete, and no data is missing
+
+#Also look at missing data for test
+vis_miss(incomeDataTestMaster)
 
 # Make a histogram of age and income
 ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=income, fill=income) + 
@@ -270,9 +283,20 @@ p
 
 
 ```{r}
-
 #Do the logistic regression
 lreg <- glm(income~.,data=incomeDataUSE,family = binomial('logit'))
+
+
+# Predict the probability
+probabilities <- predict(lreg, type = "response")
+predicted.classes <- ifelse(probabilities > 0.5, "<50k", ">50k")
+# lets do some assumption checking on numerics
+mydata <- incomeDataUSE %>%dplyr::select_if(is.numeric) 
+predictors <- colnames(mydata)
+# Bind the logit and tidying the data for plot
+mydata <- mydata %>%mutate(logit = log(probabilities/(1-probabilities))) %>%gather(key = "predictors", value = "predictor.value", -logit)
+ggplot(mydata, aes(logit, predictor.value))+geom_point(size = 0.5, alpha = 0.5) +geom_smooth(method = "loess") + theme_bw() + facet_wrap(~predictors,scales = "free_y")
+
 
 #Generate Summary Stats
 summary(lreg)
@@ -305,6 +329,13 @@ plot(lreg,which=4,id.n=3)
 
 #Plot Leverage
 plot(lreg,which = 5)
+
+#Multicollinearity
+vif(lreg)
+
+#the linearly dependent variables
+ld.vars <- attributes(alias(lreg)$Complete)$dimnames[[1]]
+ld.vars
 
 ##################
 
@@ -345,23 +376,11 @@ PrecisionMetric
 FPR <- 1-SpecificityMetric
 FPR
 
-#Old
-##########################################################################################
-#Lets first split up the data, 80,20 should do it
-#trainIndex <- createDataPartition(incomeDataUSE$income, p = .8, list = FALSE, times = 1)
-#dtrain<-incomeDataUSE[trainIndex,]
-#dtest<-incomeDataUSE[-trainIndex,]
-
-# 10-fold CV
-#fitControl <- trainControl(method = "cv",number = 10,savePredictions = TRUE)
-#lreg<-train(income~.,data=incomeDataUSE,method="glm",family=binomial(),trControl=fitControl)
-#summary(lreg)
-#varImp(lreg)
-
-
-#lreg_pred<-predict(lreg,incomeDataTestMaster)
-#confusionMatrix(lreg_pred,incomeDataTestMaster$income)
-
+fit = glm(income ~ Age, data=incomeDataUSE, family=binomial)
+newdat <- data.frame(Age=seq(min(incomeDataUSE$Age), max(incomeDataUSE$Age)))
+newdat$income = predict(fit, newdata=incomeDataTestMaster, type="response")
+plot(vs~hp, data=mtcars, col="red4")
+lines(vs ~ hp, newdat, col="green4", lwd=2)
 
 
 ```
@@ -392,10 +411,10 @@ completeModel <- lreg
 completeModel <- glm(income ~ 1, data = incomeDatTrainlog, family = binomial('logit'))
 
 # backward selection
-step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'backward')
-
+m2 <- step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'backward')
+summary(m2)
 # forward selection
-step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'forward')
+m3 <-  step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'forward')
 
 #Plot Residuals
 index <- 1:dim(incomeDatTrainlog)[1]
