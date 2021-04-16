@@ -1,0 +1,550 @@
+---
+title: "Project 2"
+author: "Kebur Fantahun, Ben Goodwin, Andre Mauldin"
+date: "3/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This markdown document contains the collective work of group one for MSDS6372, Spring 2021
+
+## Global Notes:
+
+# We have elected to use dataset 2,	https://archive.ics.uci.edu/ml/datasets/Adult, Predicting if someone makes over 50k
+# All inference will be based on these data
+
+##All EDA and analysis performed on test data
+
+######################################################################################################################################################
+
+```{r}
+#Libraries
+#Try to add libraries up here to avoid clutter and to better manage libraries
+library(tidyverse)
+library(MASS)
+library(naniar)
+library(caret)
+library(plyr)
+library(broom)
+library(imbalance)
+library(randomForest)
+library(kernlab)
+library(ROCR)
+library(car)
+```
+
+```{r}
+#Time to bring in the data and rename columns
+
+incomeDataMaster <- read.csv("adult.csv")
+#Check import
+#View(incomeDataUSE)
+
+incomeDataTestMaster <- read.csv("adultTest.csv")
+#Check import
+#View(incomeDataTestMaster)
+
+#Create some copies of the data
+incomeDataUSE <- incomeDataMaster
+#Check import
+#View(incomeDataTestMaster)
+
+#Look at summary stats for test data
+summary(incomeDataUSE)
+
+#Same thing for test data
+summary(incomeDataTestMaster)
+
+#Rename Columns, use dplyr, using "incomeDataUSE" file
+#Will rename based on "adult.names" file for consistency
+
+#Col 1, Age
+#Description: Age of subject, continuous
+#Col 2, workclass
+#Description: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked. Factor
+#Col 3, fnlwgt
+#Description: final weight. In other words, this is the number of people the census believes the entry represents
+#Col 4, education
+#Description: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
+#Col 5, education-num
+#Description: stands for the number of years of education in total, which is a continuous representation of the discrete variable education
+#Col 6, marital-status
+#Description: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse.
+#Col 7, occupation
+#Description: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
+#Col 8,  relationship
+#Description:  Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+#Col 9, race
+#Description: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black
+#Col 10, sex
+#Description: Female, Male
+#Col 11, capital-gain
+#Description: Describing income from financial investments
+#Col 12, capital-loss
+#Description: Describing loss from financial investments
+#Col 13, hours-per-week
+#Description: Number of hours worked per week
+#Col 14, native-country
+#Description: Native country of subject
+#Col 15, income
+#Description: Income
+
+# Rename all the columns to their proper names
+names(incomeDataUSE) <- c("Age", "workclass", "fnlwgt", "Education", "education-num", "marital-status", 
+    "occupation", "relationship", "race", "sex", "capital-gain", "capital-loss", 
+    "hours-per-week", "native-country", "income")
+names(incomeDataTestMaster) <- c("Age", "workclass", "fnlwgt", "Education", "education-num", "marital-status", 
+    "occupation", "relationship", "race", "sex", "capital-gain", "capital-loss", 
+    "hours-per-week", "native-country", "income")
+
+```
+
+```{r}
+#Lets fix up the data 
+
+#Change outcome to factor
+incomeDataUSE$income <- as.factor(incomeDataUSE$income)
+incomeDataTestMaster$income <- as.factor(incomeDataTestMaster$income)
+#Lets dump some variables
+incomeDataUSE <- dplyr::select(incomeDataUSE, -Education, -fnlwgt, -relationship)
+incomeDataTestMaster <- dplyr::select(incomeDataTestMaster, -Education, -fnlwgt, -relationship)
+#Reason for dropping education
+#Education level is present in the data and is numeric, thus equivalent and easier to handle
+
+#Reason for dropping fnlwgt
+#Just don"t know how to use this weighting variable
+
+#Reason for dropping relationship
+#This is encapsulated in gender and family role, essentially a duplicate variable
+
+#A few more variables to drop
+incomeDataUSE <- dplyr::select(incomeDataUSE,-"capital-gain", -"capital-loss", -"native-country")
+incomeDataTestMaster <- dplyr::select(incomeDataTestMaster,-"capital-gain", -"capital-loss", -"native-country")
+#Reason for dropping capital gain
+#Around 90% of observations don't feature this
+
+#Reason for dropping capital loss
+#Around 90% of observations don't feature this
+
+#Reason for dropping native country 
+#Most observations are from the US and skew the data
+
+#We can also make a few of the variables nicer to work with
+#Fist up, fix workclass
+#Objective here is to combine some of the working classes
+#Govt jobs can be combined
+
+#Change "?" to unknown, but first make it factor
+incomeDataUSE$workclass <- as.factor(incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- as.factor(incomeDataTestMaster$workclass)
+levels(incomeDataUSE$workclass)[1] <- 'Unknown'
+levels(incomeDataTestMaster$workclass)[1] <- 'Unknown'
+# combine into Government job
+incomeDataUSE$workclass <- gsub('Federal-gov', 'Government', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('Local-gov', 'Government', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('State-gov', 'Government', incomeDataUSE$workclass) 
+incomeDataTestMaster$workclass <- gsub('Federal-gov', 'Government', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('Local-gov', 'Government', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('State-gov', 'Government', incomeDataTestMaster$workclass) 
+
+
+# combine into Self-Employed job
+incomeDataUSE$workclass <- gsub('Self-emp-inc', 'Self-Employed', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('Self-emp-not-inc', 'Self-Employed', incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- gsub('Self-emp-inc', 'Self-Employed', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('Self-emp-not-inc', 'Self-Employed', incomeDataTestMaster$workclass)
+
+# combine into Other/Unknown
+incomeDataUSE$workclass <- gsub('Other', 'Other/Unknown', incomeDataUSE$workclass)
+incomeDataUSE$workclass <- gsub('Unknown', 'Other/Unknown', incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- gsub('Other', 'Other/Unknown', incomeDataTestMaster$workclass)
+incomeDataTestMaster$workclass <- gsub('Unknown', 'Other/Unknown', incomeDataTestMaster$workclass)
+
+
+incomeDataUSE <- incomeDataUSE[-c(1901,5361,9257,10845,14772,15533,15695,16812,20073,20337,21944,22215,23232,24596,25500,27747,28829,29158,32262,32304,32314),]
+incomeDataTestMaster <- incomeDataTestMaster[-c(2957,3177,6466,8785,8903,10647,11607,13836,13898,14034),]
+incomeDataUSE$workclass <- as.factor(incomeDataUSE$workclass)
+incomeDataTestMaster$workclass <- as.factor(incomeDataTestMaster$workclass)
+summary(incomeDataUSE$workclass)
+summary(incomeDataTestMaster$workclass)
+
+summary(incomeDataUSE)
+
+```
+
+```{r}
+#Time for some EDA
+
+#First up, check the completeness of the data
+vis_miss(incomeDataUSE)
+#How convenient, data is complete, and no data is missing
+
+#Also look at missing data for test
+vis_miss(incomeDataTestMaster)
+
+# Make a histogram of age and income
+ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=income, fill=income) + 
+  geom_histogram(binwidth=1, color='black')
+#Looks like <=50k dominates
+#Otherwise pretty typical look for income distribution
+
+# Make a histogram of age and sex
+ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=sex, fill=sex) + 
+  geom_histogram(binwidth=1, color='black')
+
+# Make a histogram of age and workclass
+
+ggplot(incomeDataUSE) + aes(x=as.numeric(Age), group=workclass, fill=workclass) + 
+  geom_histogram(binwidth=1, color='black')
+
+#Make bar plot of Education vs income by group
+####################################################################################
+eduVsIncomeDf <- data.frame(table(incomeDataUSE$`education-num`, incomeDataUSE$income))
+names(eduVsIncomeDf) <- c('Education', 'income', 'count')
+#test
+eduVsIncomeDf
+
+# calculate the percentages
+eduVsIncomeDf <- ddply(eduVsIncomeDf, .(Education), transform, percent = count/sum(count) * 100)
+eduVsIncomeDf
+# format the labels and calculate their positions
+eduVsIncomeDf <- ddply(eduVsIncomeDf, .(Education), transform, pos = (cumsum(count) - 0.5 * count))
+eduVsIncomeDf$label <- paste0(sprintf("%.0f", eduVsIncomeDf$percent), "%")
+
+# bar plot of counts by marital status with in group proportions 
+ggplot(eduVsIncomeDf, aes(x = Education, y = count, fill = income)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(y = pos, label = label), size = 2) + 
+  ggtitle('Education Level with Income')
+####################################################################################
+
+#Plot of work-class distribution
+p<-ggplot(data=incomeDataUSE, aes(x=workclass, y="count", fill=workclass)) +
+  geom_bar(stat="identity")+ggtitle("Work-Class Distribution")+ylab("Count")+xlab("Categories")
+p
+
+#Plot of work-class distribution
+p<-ggplot(data=incomeDataUSE, aes(x=occupation, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Occupation Distribution")+ylab("Count")+xlab("Categories")
+
+p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#Plot race vs income
+p<-ggplot(data=incomeDataUSE, aes(x=race, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Race Vs. Income")+ylab("Count")+xlab("Categories")
+p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+#Plot Sex vs income
+p<-ggplot(data=incomeDataUSE, aes(x=sex, y="count", fill=income)) +
+  geom_bar(stat="identity")+ggtitle("Occupation Distribution")+ylab("Count")+xlab("Categories")
+p
+```
+
+
+```{r}
+#Do the logistic regression
+lreg <- glm(income~.,data=incomeDataUSE,family = binomial('logit'))
+
+
+# Predict the probability
+probabilities <- predict(lreg, type = "response")
+predicted.classes <- ifelse(probabilities > 0.5, "<50k", ">50k")
+# lets do some assumption checking on numerics
+mydata <- incomeDataUSE %>%dplyr::select_if(is.numeric) 
+predictors <- colnames(mydata)
+# Bind the logit and tidying the data for plot
+mydata <- mydata %>% mutate(logit = log(probabilities/(1-probabilities))) %>% gather(key = "predictors", value = "predictor.value", -logit)
+ggplot(mydata, aes(logit, predictor.value))+geom_point(size = 0.5, alpha = 0.5) +geom_smooth(method = "loess") + theme_bw() + facet_wrap(~predictors,scales = "free_y")
+
+
+#Generate Summary Stats
+summary(lreg)
+
+#Generate Paramter CI's
+confint(lreg)
+
+#Copy Model into var
+completeModel <- lreg
+completeModel <- glm(income ~ 1, data = incomeDataUSE, family = binomial('logit'))
+
+# backward selection
+step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'backward')
+
+# forward selection
+step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'forward')
+
+#Plot Residuals
+index <- 1:dim(incomeDataUSE)[1]
+dev_resid <- residuals(lreg)
+income <- incomeDataUSE$income
+dff <- data.frame(index, dev_resid, income)
+
+p <- ggplot(dff, aes(x = index, y = dev_resid, color = income)) +
+  geom_point()+theme_minimal()+ggtitle("Residual Plot for Income Groups")+xlab("Subject #")+ylab("Residuals")
+p
+
+#Plot Cooks distance
+plot(lreg,which=4,id.n=3)
+
+#Plot Leverage
+plot(lreg,which = 5)
+
+#Multicollinearity
+vif(lreg)
+
+#the linearly dependent variables
+ld.vars <- attributes(alias(lreg)$Complete)$dimnames[[1]]
+ld.vars
+
+##################
+
+#Do the predictions form test dataset
+prob <- predict(lreg, incomeDataTestMaster, type = 'response')
+pred <- rep('<=50K', length(prob))
+pred[prob>=.5] <- '>50K'
+
+# Generate Confusion Matrix
+tb <- table(pred, incomeDataTestMaster$income)
+tb
+
+#Here we are doing some basic measures from the confusion matrix
+tbSum <- tb[1,1]+tb[1,2]+tb[2,1]+tb[2,2]
+tp <- tb[1,1]+tb[2,2]
+TPR <- tp/tbSum
+
+#Accuracy
+TPR
+
+#Error Rate
+ER <- (tb[2,1]+tb[1,2])/tbSum
+ER
+
+#Sensitivity
+SensitivityMetric <- (tb[1,1])/(tb[1,1]+tb[2,1])
+SensitivityMetric
+
+#Specificity
+SpecificityMetric <- (tb[2,2])/(tb[1,2]+tb[2,2])
+SpecificityMetric
+
+#Precision
+PrecisionMetric <- (tb[1,2])/(tb[1,1]+tb[2,1])
+PrecisionMetric
+
+#False Positive Rate
+FPR <- 1-SpecificityMetric
+FPR
+
+fit = glm(income ~ Age, data=incomeDataUSE, family=binomial)
+newdat <- data.frame(Age=seq(min(incomeDataUSE$Age), max(incomeDataUSE$Age)))
+newdat$income = predict(fit, newdata=incomeDataTestMaster, type="response")
+plot(vs~hp, data=mtcars, col="red4")
+lines(vs ~ hp, newdat, col="green4", lwd=2)
+
+
+```
+
+
+
+##Objective 2
+
+
+#Create a more complicated logistic regression model
+```{r}
+#Make the log data
+incomeDatTrainlog <- incomeDataUSE
+incomeDatTrainlog$Age <- log(incomeDataUSE$Age)
+incomeTestlog <- incomeDataTestMaster
+incomeTestlog$Age <- log(incomeTestlog$Age)
+#Do the logistic regression
+lreg <- glm(income~.,data=incomeDatTrainlog,family = binomial('logit'))
+
+#Generate Summary Stats
+summary(lreg)
+
+#Generate Paramter CI's
+confint(lreg)
+
+#Copy Model into var
+completeModel <- lreg
+completeModel <- glm(income ~ 1, data = incomeDatTrainlog, family = binomial('logit'))
+
+# backward selection
+m2 <- step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'backward')
+summary(m2)
+# forward selection
+m3 <-  step(completeModel, trace = F, scope = list(lower=formula(completeModel), upper=formula(completeModel)),direction = 'forward')
+
+#Plot Residuals
+index <- 1:dim(incomeDatTrainlog)[1]
+dev_resid <- residuals(lreg)
+income <- incomeDatTrainlog$income
+dff <- data.frame(index, dev_resid, income)
+
+p <- ggplot(dff, aes(x = index, y = dev_resid, color = income)) +
+  geom_point()+theme_minimal()+ggtitle("Residual Plot for Income Groups")+xlab("Subject #")+ylab("Residuals")
+p
+
+#Plot Cooks distance
+plot(lreg,which=4,id.n=3)
+
+#Plot Leverage
+plot(lreg,which = 5)
+
+#Do the predictions form test dataset
+probLog <- predict(lreg, incomeTestlog, type = 'response')
+pred <- rep('<=50K', length(probLog))
+pred[prob>=.5] <- '>50K'
+
+# Generate Confusion Matrix
+tb <- table(pred, incomeTestlog$income)
+tb
+
+#Here we are doing some basic measures from the confusion matrix
+tbSum <- tb[1,1]+tb[1,2]+tb[2,1]+tb[2,2]
+tp <- tb[1,1]+tb[2,2]
+TPR <- tp/tbSum
+
+#Accuracy
+TPR
+
+#Error Rate
+ER <- (tb[2,1]+tb[1,2])/tbSum
+ER
+
+#Sensitivity
+SensitivityMetric <- (tb[1,1])/(tb[1,1]+tb[2,1])
+SensitivityMetric
+
+#Specificity
+SpecificityMetric <- (tb[2,2])/(tb[1,2]+tb[2,2])
+SpecificityMetric
+
+#Precision
+PrecisionMetric <- (tb[1,2])/(tb[1,1]+tb[2,1])
+PrecisionMetric
+
+#False Positive Rate
+FPR <- 1-SpecificityMetric
+FPR
+
+
+
+
+```
+
+#Create another competing model using continuous predictors with LDA or QDA
+```{r}
+#Build up LDA
+lda_income <- lda(income ~Age+`education-num` +`hours-per-week`,data=incomeDataUSE)
+
+#Plot model
+plot(lda_income)
+
+#Prediction
+predictLDA <- predict(lda_income,newdata=incomeDataTestMaster)
+
+#CM
+ldaCM <- table(incomeDataTestMaster$income,predictLDA$class)
+ldaCM
+
+#Classification Rate
+ldaFinal <- ldaCM %>% prop.table() %>% round(3)
+ldaFinal
+```
+
+
+
+#This block contains an attempt at a support vector machine, nonparametric model to compare to
+```{r}
+svmIncomeModel <- ksvm(income ~ ., data = incomeDataUSE)
+svmIncomeModelPredictions <- predict(svmIncomeModel, newdata = incomeDataTestMaster, type = 'decision')
+svmIncomeModelFinal <- predict(svmIncomeModel, newdata = incomeDataTestMaster, type = 'response')
+
+
+#Now create confusion matrix for SVM
+svmCM <- table(svmIncomeModelFinal, incomeDataTestMaster$income)
+svmCM
+
+#Here we are doing some basic measures from the confusion matrix
+tbSum <- svmCM[1,1]+svmCM[1,2]+svmCM[2,1]+svmCM[2,2]
+tp <- svmCM[1,1]+svmCM[2,2]
+TPR <- tp/tbSum
+
+
+#Accuracy
+TPR
+
+#Error Rate
+ER <- (svmCM[2,1]+svmCM[1,2])/tbSum
+ER
+
+#Sensitivity
+SensitivityMetric <- (svmCM[1,1])/(svmCM[1,1]+svmCM[2,1])
+SensitivityMetric
+
+#Specificity
+SpecificityMetric <- (svmCM[2,2])/(svmCM[1,2]+svmCM[2,2])
+SpecificityMetric
+
+#Precision
+PrecisionMetric <- (svmCM[1,2])/(svmCM[1,1]+svmCM[2,1])
+PrecisionMetric
+
+#False Positive Rate
+FPR <- 1-SpecificityMetric
+FPR
+
+
+
+```
+
+
+#Create an ROC curve for each model, plot it, and then add to AUC table
+```{r}
+# create a prediction object
+pr <- prediction(prob, incomeDataTestMaster$income)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+
+pr1 <- prediction(probLog, incomeTestlog$income)
+prf1 <- performance(pr1, measure = "tpr", x.measure = "fpr")
+
+# create a data frame for TP and FP rates
+dd <- data.frame(FP = prf@x.values[[1]], TP = prf@y.values[[1]])
+dd2 <- data.frame(FP = prf1@x.values[[1]], TP = prf1@y.values[[1]])
+
+# SVM
+pr4 <- prediction(svmIncomeModelPredictions, incomeDataTestMaster$income)
+prf4 <- performance(pr4, measure = "tpr", x.measure = "fpr")
+dd4 <- data.frame(FP = prf4@x.values[[1]], TP = prf4@y.values[[1]])
+
+# plot ROC curve for logistic regression
+g <- ggplot() + 
+  geom_line(data = dd, aes(x = FP, y = TP, color = 'Logistic Regression')) + 
+   
+  geom_line(data = dd2, aes(x = FP, y = TP, color = 'Logged Logistic Regression')) + 
+
+  geom_line(data = dd4, aes(x = FP, y = TP, color = 'Support Vector Machine')) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1)) +
+  ggtitle('ROC Curve') + 
+  labs(x = 'False Positive Rate', y = 'True Positive Rate') 
+
+
+g +  scale_colour_manual(name = 'Classifier', values = c('Logistic Regression'='Plum', 
+                                               'Logged Logistic Regression'='Salmon','Support Vector Machine'='#0072B2'))
+
+# AUC
+auc <- rbind(performance(pr, measure = 'auc')@y.values[[1]],
+             performance(pr4, measure = 'auc')@y.values[[1]])
+rownames(auc) <- (c('Logistic Regression', 'Support Vector Machine'))
+colnames(auc) <- 'Area Under ROC Curve'
+round(auc, 4)
+```
+
+
+
+
