@@ -1,5 +1,5 @@
-# Stats2_Proj2
-# MSDS 6372 - Statistics 2 Project
+# Prediction of Incomes based on Census Income Data
+# MSDS 6372 - Statistics 2 Project 2
 
 # Pulling data from https://archive.ics.uci.edu/ml/datasets/Adult for logistic analysis
 * "adult.data" - Contains all the data about adults and attributes related to the prediction of whether or not they have 50k
